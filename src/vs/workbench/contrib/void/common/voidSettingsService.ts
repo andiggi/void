@@ -289,7 +289,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 			// add disableSystemMessage feature
 			if (readS.globalSettings.disableSystemMessage === undefined) readS.globalSettings.disableSystemMessage = false;
-			
+
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
 		}
@@ -366,6 +366,12 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 
 	setSettingOfProvider: SetSettingOfProviderFn = async (providerName, settingName, newVal) => {
+		// Air-gapped: Validate endpoints - reject https:// connections
+		if (settingName === 'endpoint' && typeof newVal === 'string') {
+			if (newVal.trim().toLowerCase().startsWith('https://')) {
+				throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs (e.g., http://10.x.x.x:11434).');
+			}
+		}
 
 		const newModelSelectionOfFeature = this.state.modelSelectionOfFeature
 

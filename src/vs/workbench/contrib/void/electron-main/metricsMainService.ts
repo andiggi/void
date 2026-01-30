@@ -12,7 +12,8 @@ import { StorageTarget, StorageScope } from '../../../../platform/storage/common
 import { IApplicationStorageMainService } from '../../../../platform/storage/electron-main/storageMainService.js';
 
 import { IMetricsService } from '../common/metricsService.js';
-import { PostHog } from 'posthog-node'
+// Air-gapped: Telemetry disabled - PostHog removed
+// import { PostHog } from 'posthog-node'
 import { OPT_OUT_KEY } from '../common/storageKeys.js';
 
 
@@ -35,7 +36,8 @@ const osInfo = _getOSInfo()
 export class MetricsMainService extends Disposable implements IMetricsService {
 	_serviceBrand: undefined;
 
-	private readonly client: PostHog
+	// Air-gapped: Telemetry disabled - PostHog client removed
+	// private readonly client: PostHog
 
 	private _initProperties: object = {}
 
@@ -88,14 +90,16 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
-			host: 'https://us.i.posthog.com',
-		})
+		// Air-gapped: Telemetry completely disabled - PostHog client not initialized
+		// this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
+		// 	host: 'https://us.i.posthog.com',
+		// })
 
 		this.initialize() // async
 	}
 
 	async initialize() {
+		// Air-gapped: Telemetry disabled - no initialization
 		// very important to await whenReady!
 		await this._appStorage.whenReady
 
@@ -103,7 +107,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 
 		const isDevMode = !this._envMainService.isBuilt // found in abstractUpdateService.ts
 
-		// custom properties we identify
+		// custom properties we identify (kept for debugging only, not sent)
 		this._initProperties = {
 			commit,
 			vscodeVersion: version,
@@ -118,31 +122,31 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 			...osInfo,
 		}
 
-		const identifyMessage = {
-			distinctId: this.distinctId,
-			properties: this._initProperties,
-		}
+		// Air-gapped: No telemetry sent
+		// const identifyMessage = {
+		// 	distinctId: this.distinctId,
+		// 	properties: this._initProperties,
+		// }
 
-		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, false)
+		// const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, false)
 
-		console.log('User is opted out of basic Void metrics?', didOptOut)
-		if (didOptOut) {
-			this.client.optOut()
-		}
-		else {
-			this.client.optIn()
-			this.client.identify(identifyMessage)
-		}
+		// console.log('User is opted out of basic Void metrics?', didOptOut)
+		// if (didOptOut) {
+		// 	this.client.optOut()
+		// }
+		// else {
+		// 	this.client.optIn()
+		// 	this.client.identify(identifyMessage)
+		// }
 
-
-		console.log('Void posthog metrics info:', JSON.stringify(identifyMessage, null, 2))
+		// console.log('Void posthog metrics info:', JSON.stringify(identifyMessage, null, 2))
 	}
 
 
-	capture: IMetricsService['capture'] = (event, params) => {
-		const capture = { distinctId: this.distinctId, event, properties: params } as const
-		// console.log('full capture:', this.distinctId)
-		this.client.capture(capture)
+	capture: IMetricsService['capture'] = (_event, _params) => {
+		// Air-gapped: Telemetry disabled - no-op
+		// const capture = { distinctId: this.distinctId, event, properties: params } as const
+		// this.client.capture(capture)
 	}
 
 	setOptOut: IMetricsService['setOptOut'] = (newVal: boolean) => {

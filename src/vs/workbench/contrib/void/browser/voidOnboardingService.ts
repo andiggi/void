@@ -3,6 +3,9 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+// Air-gapped: Onboarding completely disabled
+// All imports and code below are kept for reference but not used
+/*
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
@@ -48,5 +51,6 @@ export class OnboardingContribution extends Disposable implements IWorkbenchCont
 	}
 }
 
-// Register the contribution to be initialized during the AfterRestored phase
-registerWorkbenchContribution2(OnboardingContribution.ID, OnboardingContribution, WorkbenchPhase.AfterRestored);
+// Air-gapped: Onboarding disabled - removed for simple VS Code-like experience
+// registerWorkbenchContribution2(OnboardingContribution.ID, OnboardingContribution, WorkbenchPhase.AfterRestored);
+*/

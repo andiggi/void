@@ -74,17 +74,8 @@ Menu.setApplicationMenu(null);
 
 // Configure crash reporter
 perf.mark('code/willStartCrashReporter');
-// If a crash-reporter-directory is specified we store the crash reports
-// in the specified directory and don't upload them to the crash server.
-//
-// Appcenter crash reporting is enabled if
-// * enable-crash-reporter runtime argument is set to 'true'
-// * --disable-crash-reporter command line parameter is not set
-//
-// Disable crash reporting in all other cases.
-if (args['crash-reporter-directory'] || (argvConfig['enable-crash-reporter'] && !args['disable-crash-reporter'])) {
-	configureCrashReporter();
-}
+// Air-gapped: Crash reporting completely disabled
+// No crash reports will be collected or uploaded
 perf.mark('code/didStartCrashReporter');
 
 // Set logs path before app 'ready' event if running portable
@@ -428,6 +419,7 @@ function getArgvConfigPath(): string {
 	return path.join(os.homedir(), dataFolderName!, 'argv.json');
 }
 
+// Air-gapped: Crash reporter disabled
 function configureCrashReporter(): void {
 	let crashReporterDirectory = args['crash-reporter-directory'];
 	let submitURL = '';
@@ -517,7 +509,11 @@ function configureCrashReporter(): void {
 		uploadToServer,
 		compress: true
 	});
+	// Air-gapped: Function body kept but never called
 }
+
+// Mark function as intentionally unused in air-gapped mode
+void configureCrashReporter;
 
 function getJSFlags(cliArgs: NativeParsedArgs): string | null {
 	const jsFlags: string[] = [];

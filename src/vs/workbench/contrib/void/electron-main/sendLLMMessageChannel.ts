@@ -47,6 +47,8 @@ export class LLMMessageChannel implements IServerChannel {
 
 	// stupidly, channels can't take in @IService
 	constructor(
+		// Air-gapped: Telemetry disabled - metrics service not used
+		// @ts-ignore - intentionally unused
 		private readonly metricsService: IMetricsService,
 	) { }
 
@@ -146,7 +148,12 @@ export class LLMMessageChannel implements IServerChannel {
 			onSuccess: (p) => { emitters.success.fire({ requestId, ...p }); },
 			onError: (p) => { emitters.error.fire({ requestId, ...p }); },
 		}
-		sendLLMMessageToProviderImplementation[providerName].list(mainThreadParams)
+		const implementation = sendLLMMessageToProviderImplementation[providerName]
+		if (implementation?.list) {
+			implementation.list(mainThreadParams)
+		} else {
+			throw new Error(`Provider ${providerName} does not support listing models`)
+		}
 	}
 
 

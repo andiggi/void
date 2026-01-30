@@ -13,7 +13,7 @@ import { LoggerGroup } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
 import { getRemoteName } from '../../remote/common/remoteHosts.js';
 import { verifyMicrosoftInternalDomain } from './commonProperties.js';
-import { ICustomEndpointTelemetryService, ITelemetryData, ITelemetryEndpoint, ITelemetryService, TelemetryConfiguration, TelemetryLevel, TELEMETRY_CRASH_REPORTER_SETTING_ID, TELEMETRY_OLD_SETTING_ID, TELEMETRY_SETTING_ID } from './telemetry.js';
+import { ICustomEndpointTelemetryService, ITelemetryData, ITelemetryEndpoint, ITelemetryService, TelemetryLevel } from './telemetry.js';
 
 /**
  * A special class used to denoting a telemetry value which should not be clean.
@@ -92,12 +92,15 @@ export interface URIDescriptor {
  * @param environmentService
  * @returns false - telemetry is completely disabled, true - telemetry is logged locally, but may not be sent
  */
-export function supportsTelemetry(productService: IProductService, environmentService: IEnvironmentService): boolean {
-	// If it's OSS and telemetry isn't disabled via the CLI we will allow it for logging only purposes
-	if (!environmentService.isBuilt && !environmentService.disableTelemetry) {
-		return true;
-	}
-	return !(environmentService.disableTelemetry || !productService.enableTelemetry);
+export function supportsTelemetry(_productService: IProductService, _environmentService: IEnvironmentService): boolean {
+	// Air-gapped: Telemetry hard-disabled - always return false
+	return false;
+	// Original code kept for reference:
+	// // If it's OSS and telemetry isn't disabled via the CLI we will allow it for logging only purposes
+	// if (!environmentService.isBuilt && !environmentService.disableTelemetry) {
+	// 	return true;
+	// }
+	// return !(environmentService.disableTelemetry || !productService.enableTelemetry);
 }
 
 /**
@@ -134,27 +137,9 @@ export function isLoggingOnly(productService: IProductService, environmentServic
  * @param configurationService
  * @returns OFF, ERROR, ON
  */
-export function getTelemetryLevel(configurationService: IConfigurationService): TelemetryLevel {
-	const newConfig = configurationService.getValue<TelemetryConfiguration>(TELEMETRY_SETTING_ID);
-	const crashReporterConfig = configurationService.getValue<boolean | undefined>(TELEMETRY_CRASH_REPORTER_SETTING_ID);
-	const oldConfig = configurationService.getValue<boolean | undefined>(TELEMETRY_OLD_SETTING_ID);
-
-	// If `telemetry.enableCrashReporter` is false or `telemetry.enableTelemetry' is false, disable telemetry
-	if (oldConfig === false || crashReporterConfig === false) {
-		return TelemetryLevel.NONE;
-	}
-
-	// Maps new telemetry setting to a telemetry level
-	switch (newConfig ?? TelemetryConfiguration.ON) {
-		case TelemetryConfiguration.ON:
-			return TelemetryLevel.USAGE;
-		case TelemetryConfiguration.ERROR:
-			return TelemetryLevel.ERROR;
-		case TelemetryConfiguration.CRASH:
-			return TelemetryLevel.CRASH;
-		case TelemetryConfiguration.OFF:
-			return TelemetryLevel.NONE;
-	}
+export function getTelemetryLevel(_configurationService: IConfigurationService): TelemetryLevel {
+	// Air-gapped: Telemetry hard-disabled - always return NONE
+	return TelemetryLevel.NONE;
 }
 
 export interface Properties {

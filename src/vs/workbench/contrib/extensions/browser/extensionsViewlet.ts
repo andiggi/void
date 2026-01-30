@@ -16,12 +16,12 @@ import { append, $, Dimension, hide, show, DragAndDropObserver, trackFocus, addD
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import { IExtensionsWorkbenchService, IExtensionsViewPaneContainer, VIEWLET_ID, CloseExtensionDetailsOnViewChangeKey, INSTALL_EXTENSION_FROM_VSIX_COMMAND_ID, WORKSPACE_RECOMMENDATIONS_VIEW_ID, AutoCheckUpdatesConfigurationKey, OUTDATED_EXTENSIONS_VIEW_ID, CONTEXT_HAS_GALLERY, extensionsSearchActionsMenu, AutoRestartConfigurationKey, ExtensionRuntimeActionType } from '../common/extensions.js';
+import { IExtensionsWorkbenchService, IExtensionsViewPaneContainer, VIEWLET_ID, CloseExtensionDetailsOnViewChangeKey, INSTALL_EXTENSION_FROM_VSIX_COMMAND_ID, WORKSPACE_RECOMMENDATIONS_VIEW_ID, AutoCheckUpdatesConfigurationKey, OUTDATED_EXTENSIONS_VIEW_ID, CONTEXT_HAS_GALLERY, extensionsSearchActionsMenu, AutoRestartConfigurationKey, ExtensionRuntimeActionType, SELECT_INSTALL_VSIX_EXTENSION_COMMAND_ID } from '../common/extensions.js';
 import { InstallLocalExtensionsInRemoteAction, InstallRemoteExtensionsInLocalAction } from './extensionsActions.js';
 import { IExtensionManagementService, ILocalExtension } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { IWorkbenchExtensionEnablementService, IExtensionManagementServerService, IExtensionManagementServer } from '../../../services/extensionManagement/common/extensionManagement.js';
 import { ExtensionsInput } from '../common/extensionsInput.js';
-import { ExtensionsListView, EnabledExtensionsView, DisabledExtensionsView, RecommendedExtensionsView, WorkspaceRecommendedExtensionsView, ServerInstalledExtensionsView, DefaultRecommendedExtensionsView, UntrustedWorkspaceUnsupportedExtensionsView, UntrustedWorkspacePartiallySupportedExtensionsView, VirtualWorkspaceUnsupportedExtensionsView, VirtualWorkspacePartiallySupportedExtensionsView, DefaultPopularExtensionsView, DeprecatedExtensionsView, SearchMarketplaceExtensionsView, RecentlyUpdatedExtensionsView, OutdatedExtensionsView, StaticQueryExtensionsView, NONE_CATEGORY } from './extensionsViews.js';
+import { ExtensionsListView, EnabledExtensionsView, DisabledExtensionsView, RecommendedExtensionsView, WorkspaceRecommendedExtensionsView, ServerInstalledExtensionsView, DefaultRecommendedExtensionsView, UntrustedWorkspaceUnsupportedExtensionsView, UntrustedWorkspacePartiallySupportedExtensionsView, VirtualWorkspaceUnsupportedExtensionsView, VirtualWorkspacePartiallySupportedExtensionsView, DefaultPopularExtensionsView, DeprecatedExtensionsView, RecentlyUpdatedExtensionsView, OutdatedExtensionsView, StaticQueryExtensionsView, NONE_CATEGORY } from './extensionsViews.js';
 import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import Severity from '../../../../base/common/severity.js';
@@ -291,13 +291,9 @@ export class ExtensionsViewletViewsContribution extends Disposable implements IW
 
 		/*
 		 * View used for searching Marketplace
+		 * Air-gapped: Marketplace disabled - removed for security
 		 */
-		viewDescriptors.push({
-			id: 'workbench.views.extensions.marketplace',
-			name: localize2('marketPlace', "Marketplace"),
-			ctorDescriptor: new SyncDescriptor(SearchMarketplaceExtensionsView, [{}]),
-			when: ContextKeyExpr.and(ContextKeyExpr.has('searchMarketplaceExtensions')),
-		});
+		// Marketplace view removed for air-gapped environment
 
 		/*
 		 * View used for searching all installed extensions
@@ -579,7 +575,8 @@ export class ExtensionsViewPaneContainer extends ViewPaneContainer implements IE
 		hide(overlay);
 
 		this.header = append(this.root, $('.header'));
-		const placeholder = localize('searchExtensions', "Search Extensions in Marketplace");
+		// Air-gapped: Marketplace disabled - replaced with manual install
+		const placeholder = localize('searchExtensions', "Marketplace disabled - use Manual Install for .vsix files");
 
 		const searchValue = this.searchViewletState['query.value'] ? this.searchViewletState['query.value'] : '';
 
@@ -606,13 +603,32 @@ export class ExtensionsViewPaneContainer extends ViewPaneContainer implements IE
 		}
 
 		this._register(this.searchBox.onInputDidChange(() => {
-			this.sortByContextKey.set(Query.parse(this.searchBox?.getValue() ?? '').sortBy);
+			// Air-gapped: Marketplace search disabled
+			// Only allow local extension queries
+			const query = this.searchBox?.getValue() ?? '';
+			if (query && !ExtensionsListView.isLocalExtensionsQuery(query)) {
+				if (this.searchBox) {
+					this.searchBox.setValue('');
+				}
+				this.notificationService.info('Marketplace search is disabled in air-gapped mode. Use Manual Install for .vsix files.');
+				return;
+			}
+			this.sortByContextKey.set(Query.parse(query).sortBy);
 			this.triggerSearch();
 		}, this));
 
 		this._register(this.searchBox.onShouldFocusResults(() => this.focusListView(), this));
 
 		const controlElement = append(searchContainer, $('.extensions-search-actions-container'));
+
+		// Air-gapped: Add Manual Install button
+		const manualInstallButton = append(controlElement, $('button', { class: 'manual-install-button' }, 'Manual Install'));
+		manualInstallButton.style.marginLeft = '8px';
+		manualInstallButton.style.padding = '4px 12px';
+		manualInstallButton.onclick = async () => {
+			await this.commandService.executeCommand(SELECT_INSTALL_VSIX_EXTENSION_COMMAND_ID);
+		};
+
 		this._register(this.instantiationService.createInstance(MenuWorkbenchToolBar, controlElement, extensionsSearchActionsMenu, {
 			toolbarOptions: {
 				primaryGroup: () => true,

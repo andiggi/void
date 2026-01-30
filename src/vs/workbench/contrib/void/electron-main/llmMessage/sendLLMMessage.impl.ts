@@ -80,18 +80,34 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 	}
 	else if (providerName === 'ollama') {
 		const thisConfig = settingsOfProvider[providerName]
+		// Air-gapped: Validate endpoint - reject https://
+		if (thisConfig.endpoint.toLowerCase().startsWith('https://')) {
+			throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs.')
+		}
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
 	else if (providerName === 'vLLM') {
 		const thisConfig = settingsOfProvider[providerName]
+		// Air-gapped: Validate endpoint - reject https://
+		if (thisConfig.endpoint.toLowerCase().startsWith('https://')) {
+			throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs.')
+		}
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
 	else if (providerName === 'liteLLM') {
 		const thisConfig = settingsOfProvider[providerName]
+		// Air-gapped: Validate endpoint - reject https://
+		if (thisConfig.endpoint.toLowerCase().startsWith('https://')) {
+			throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs.')
+		}
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
 	else if (providerName === 'lmStudio') {
 		const thisConfig = settingsOfProvider[providerName]
+		// Air-gapped: Validate endpoint - reject https://
+		if (thisConfig.endpoint.toLowerCase().startsWith('https://')) {
+			throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs.')
+		}
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
 	else if (providerName === 'openRouter') {
@@ -152,6 +168,10 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 	}
 	else if (providerName === 'openAICompatible') {
 		const thisConfig = settingsOfProvider[providerName]
+		// Air-gapped: Validate endpoint - reject https://
+		if (thisConfig.endpoint.toLowerCase().startsWith('https://')) {
+			throw new Error('HTTPS endpoints are not allowed in air-gapped mode. Please use http:// for internal network URLs.')
+		}
 		const headers = parseHeadersJSON(thisConfig.headersJSON)
 		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: thisConfig.apiKey, defaultHeaders: headers, ...commonPayloadOpts })
 	}
@@ -888,7 +908,7 @@ export const sendLLMMessageToProviderImplementation = {
 	openAICompatible: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params), // using openai's SDK is not ideal (your implementation might not do tools, reasoning, FIM etc correctly), talk to us for a custom integration
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: null,
+		list: (params) => _openaiCompatibleList(params),
 	},
 	openRouter: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),

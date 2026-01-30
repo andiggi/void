@@ -722,14 +722,14 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 		</div>
 
 		<div className='px-0'>
-			{/* settings besides models (e.g. api key) */}
-			{settingNames.map((settingName, i) => {
-
+			{/* settings besides models (e.g. endpoint) - API keys removed for air-gapped environment */}
+			{settingNames.filter(settingName => settingName !== 'apiKey').map((settingName, i) => {
+				const filteredSettingNames = settingNames.filter(sn => sn !== 'apiKey')
 				return <ProviderSetting
 					key={settingName}
 					providerName={providerName}
 					settingName={settingName}
-					subTextMd={i !== settingNames.length - 1 ? null
+					subTextMd={i !== filteredSettingNames.length - 1 ? null
 						: <ChatMarkdownRender string={subTextMdOfProviderName(providerName)} chatMessageLocation={undefined} />}
 				/>
 			})}
@@ -1029,534 +1029,127 @@ const MCPServersList = () => {
 	return <div className="my-2">{content}</div>
 };
 
+// Simplified Server Endpoint Configuration Component
+const ServerEndpointConfig = () => {
+	const accessor = useAccessor()
+	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const refreshModelService = accessor.get('IRefreshModelService')
+	const settingsState = useSettingsState()
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	const endpoint = settingsState.settingsOfProvider.openAICompatible?.endpoint || ''
+	const apiKey = settingsState.settingsOfProvider.openAICompatible?.apiKey || ''
+
+	const handleEndpointChange = useCallback(async (newEndpoint: string) => {
+		setError(null)
+		try {
+			await voidSettingsService.setSettingOfProvider('openAICompatible', 'endpoint', newEndpoint)
+			// Auto-refresh models when endpoint changes
+			if (newEndpoint.trim()) {
+				setIsRefreshing(true)
+				refreshModelService.startRefreshingModels('openAICompatible', {
+					enableProviderOnSuccess: true,
+					doNotFire: false
+				})
+				// Reset refreshing state after a delay
+				setTimeout(() => setIsRefreshing(false), 2000)
+			}
+		} catch (err: any) {
+			setError(err.message || 'Failed to set endpoint')
+		}
+	}, [voidSettingsService, refreshModelService])
+
+	const handleApiKeyChange = useCallback(async (newApiKey: string) => {
+		try {
+			await voidSettingsService.setSettingOfProvider('openAICompatible', 'apiKey', newApiKey)
+		} catch (err: any) {
+			setError(err.message || 'Failed to set API key')
+		}
+	}, [voidSettingsService])
+
+	const handleRefreshModels = useCallback(() => {
+		setError(null)
+		setIsRefreshing(true)
+		refreshModelService.startRefreshingModels('openAICompatible', {
+			enableProviderOnSuccess: false,
+			doNotFire: false
+		})
+		setTimeout(() => setIsRefreshing(false), 2000)
+	}, [refreshModelService])
+
+	return (
+		<div className="flex flex-col gap-4 max-w-2xl">
+			<div>
+				<h3 className="text-lg font-medium text-void-fg-1 mb-2">Server Endpoint</h3>
+				<p className="text-sm text-void-fg-3 mb-4">
+					Configure your local LLM server endpoint. Models will be automatically fetched from the server.
+				</p>
+
+				<div className="flex flex-col gap-3">
+					<div>
+						<label className="block text-sm text-void-fg-2 mb-1">Endpoint URL</label>
+						<VoidSimpleInputBox
+							className="w-full"
+							value={endpoint}
+							placeholder="http://localhost:11434 or http://10.x.x.x:11434"
+							onChangeValue={handleEndpointChange}
+						/>
+						<p className="text-xs text-void-fg-4 mt-1">
+							Enter the base URL of your OpenAI-compatible server (e.g., http://localhost:11434 for Ollama)
+						</p>
+					</div>
+
+					<div>
+						<label className="block text-sm text-void-fg-2 mb-1">API Key (Optional)</label>
+						<VoidSimpleInputBox
+							className="w-full"
+							value={apiKey}
+							placeholder="Leave empty if not required"
+							onChangeValue={handleApiKeyChange}
+							passwordBlur={true}
+						/>
+						<p className="text-xs text-void-fg-4 mt-1">
+							Some servers require an API key for authentication
+						</p>
+					</div>
+
+					{endpoint && (
+						<div className="flex items-center gap-2">
+							<button
+								onClick={handleRefreshModels}
+								disabled={isRefreshing}
+								className="px-4 py-2 bg-void-bg-2 hover:bg-void-bg-3 text-void-fg-2 rounded text-sm disabled:opacity-50"
+							>
+								{isRefreshing ? 'Refreshing...' : 'Refresh Models'}
+							</button>
+							{isRefreshing && <Loader2 className="size-4 animate-spin text-void-fg-3" />}
+						</div>
+					)}
+
+					{error && (
+						<div className="p-3 bg-red-500/20 border border-red-500/50 rounded text-sm text-red-400">
+							{error}
+						</div>
+					)}
+				</div>
+			</div>
+		</div>
+	)
+}
+
 export const Settings = () => {
 	const isDark = useIsDark()
-	// ─── sidebar nav ──────────────────────────
-	const [selectedSection, setSelectedSection] =
-		useState<Tab>('models');
-
-	const navItems: { tab: Tab; label: string }[] = [
-		{ tab: 'models', label: 'Models' },
-		{ tab: 'localProviders', label: 'Local Providers' },
-		{ tab: 'providers', label: 'Main Providers' },
-		{ tab: 'featureOptions', label: 'Feature Options' },
-		{ tab: 'general', label: 'General' },
-		{ tab: 'mcp', label: 'MCP' },
-		{ tab: 'all', label: 'All Settings' },
-	];
-	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
-	const accessor = useAccessor()
-	const commandService = accessor.get('ICommandService')
-	const environmentService = accessor.get('IEnvironmentService')
-	const nativeHostService = accessor.get('INativeHostService')
-	const settingsState = useSettingsState()
-	const voidSettingsService = accessor.get('IVoidSettingsService')
-	const chatThreadsService = accessor.get('IChatThreadService')
-	const notificationService = accessor.get('INotificationService')
-	const mcpService = accessor.get('IMCPService')
-	const storageService = accessor.get('IStorageService')
-	const metricsService = accessor.get('IMetricsService')
-	const isOptedOut = useIsOptedOut()
-
-	const onDownload = (t: 'Chats' | 'Settings') => {
-		let dataStr: string
-		let downloadName: string
-		if (t === 'Chats') {
-			// Export chat threads
-			dataStr = JSON.stringify(chatThreadsService.state, null, 2)
-			downloadName = 'void-chats.json'
-		}
-		else if (t === 'Settings') {
-			// Export user settings
-			dataStr = JSON.stringify(voidSettingsService.state, null, 2)
-			downloadName = 'void-settings.json'
-		}
-		else {
-			dataStr = ''
-			downloadName = ''
-		}
-
-		const blob = new Blob([dataStr], { type: 'application/json' })
-		const url = URL.createObjectURL(blob)
-		const a = document.createElement('a')
-		a.href = url
-		a.download = downloadName
-		a.click()
-		URL.revokeObjectURL(url)
-	}
-
-
-	// Add file input refs
-	const fileInputSettingsRef = useRef<HTMLInputElement>(null)
-	const fileInputChatsRef = useRef<HTMLInputElement>(null)
-
-	const [s, ss] = useState(0)
-
-	const handleUpload = (t: 'Chats' | 'Settings') => (e: React.ChangeEvent<HTMLInputElement>,) => {
-		const files = e.target.files
-		if (!files) return;
-		const file = files[0]
-		if (!file) return
-
-		const reader = new FileReader();
-		reader.onload = () => {
-			try {
-				const json = JSON.parse(reader.result as string);
-
-				if (t === 'Chats') {
-					chatThreadsService.dangerousSetState(json as any)
-				}
-				else if (t === 'Settings') {
-					voidSettingsService.dangerousSetState(json as any)
-				}
-
-				notificationService.info(`${t} imported successfully!`)
-			} catch (err) {
-				notificationService.notify({ message: `Failed to import ${t}`, source: err + '', severity: Severity.Error, })
-			}
-		};
-		reader.readAsText(file);
-		e.target.value = '';
-
-		ss(s => s + 1)
-	}
 
 
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh' }}>
-				{/* ──────────────  SIDEBAR  ────────────── */}
-
-				<aside className="md:w-1/4 w-full p-6 shrink-0">
-					{/* vertical tab list */}
-					<div className="flex flex-col gap-2 mt-12">
-						{navItems.map(({ tab, label }) => (
-							<button
-								key={tab}
-								onClick={() => {
-									if (tab === 'all') {
-										setSelectedSection('all');
-										window.scrollTo({ top: 0, behavior: 'smooth' });
-									} else {
-										setSelectedSection(tab);
-									}
-								}}
-								className={`
-          py-2 px-4 rounded-md text-left transition-all duration-200
-          ${selectedSection === tab
-										? 'bg-[#0e70c0]/80 text-white font-medium shadow-sm'
-										: 'bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1'}
-        `}
-							>
-								{label}
-							</button>
-						))}
-					</div>
-				</aside>
-
-				{/* ───────────── MAIN PANE ───────────── */}
-				<main className="flex-1 p-6 select-none">
-
-
-
-					<div className='max-w-3xl'>
-
-						<h1 className='text-2xl w-full'>{`Void's Settings`}</h1>
-
-						<div className='w-full h-[1px] my-2' />
-
-						{/* Models section (formerly FeaturesTab) */}
-						<ErrorBoundary>
-							<RedoOnboardingButton />
-						</ErrorBoundary>
-
-						<div className='w-full h-[1px] my-4' />
-
-						{/* All sections in flex container with gap-12 */}
-						<div className='flex flex-col gap-12'>
-							{/* Models section (formerly FeaturesTab) */}
-							<div className={shouldShowTab('models') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Models</h2>
-									<ModelDump />
-									<div className='w-full h-[1px] my-4' />
-									<AutoDetectLocalModelsToggle />
-									<RefreshableModels />
-								</ErrorBoundary>
-							</div>
-
-							{/* Local Providers section */}
-							<div className={shouldShowTab('localProviders') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Local Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Void can access any model that you host locally. We automatically detect your local models by default.`}</h3>
-
-									<div className='opacity-80 mb-4'>
-										<OllamaSetupInstructions sayWeAutoDetect={true} />
-									</div>
-
-									<VoidProviderSettings providerNames={localProviderNames} />
-								</ErrorBoundary>
-							</div>
-
-							{/* Main Providers section */}
-							<div className={shouldShowTab('providers') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Main Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Void can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
-
-									<VoidProviderSettings providerNames={nonlocalProviderNames} />
-								</ErrorBoundary>
-							</div>
-
-							{/* Feature Options section */}
-							<div className={shouldShowTab('featureOptions') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Feature Options</h2>
-
-									<div className='flex flex-col gap-y-8 my-4'>
-										<ErrorBoundary>
-											{/* FIM */}
-											<div>
-												<h4 className={`text-base`}>{displayInfoOfFeatureName('Autocomplete')}</h4>
-												<div className='text-sm text-void-fg-3 mt-1'>
-													<span>
-														Experimental.{' '}
-													</span>
-													<span
-														className='hover:brightness-110'
-														data-tooltip-id='void-tooltip'
-														data-tooltip-content='We recommend using the largest qwen2.5-coder model you can with Ollama (try qwen2.5-coder:3b).'
-														data-tooltip-class-name='void-max-w-[20px]'
-													>
-														Only works with FIM models.*
-													</span>
-												</div>
-
-												<div className='my-2'>
-													{/* Enable Switch */}
-													<ErrorBoundary>
-														<div className='flex items-center gap-x-2 my-2'>
-															<VoidSwitch
-																size='xs'
-																value={settingsState.globalSettings.enableAutocomplete}
-																onChange={(newVal) => voidSettingsService.setGlobalSetting('enableAutocomplete', newVal)}
-															/>
-															<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.enableAutocomplete ? 'Enabled' : 'Disabled'}</span>
-														</div>
-													</ErrorBoundary>
-
-													{/* Model Dropdown */}
-													<ErrorBoundary>
-														<div className={`my-2 ${!settingsState.globalSettings.enableAutocomplete ? 'hidden' : ''}`}>
-															<ModelDropdown featureName={'Autocomplete'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
-														</div>
-													</ErrorBoundary>
-
-												</div>
-
-											</div>
-										</ErrorBoundary>
-
-										{/* Apply */}
-										<ErrorBoundary>
-
-											<div className='w-full'>
-												<h4 className={`text-base`}>{displayInfoOfFeatureName('Apply')}</h4>
-												<div className='text-sm text-void-fg-3 mt-1'>Settings that control the behavior of the Apply button.</div>
-
-												<div className='my-2'>
-													{/* Sync to Chat Switch */}
-													<div className='flex items-center gap-x-2 my-2'>
-														<VoidSwitch
-															size='xs'
-															value={settingsState.globalSettings.syncApplyToChat}
-															onChange={(newVal) => voidSettingsService.setGlobalSetting('syncApplyToChat', newVal)}
-														/>
-														<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.syncApplyToChat ? 'Same as Chat model' : 'Different model'}</span>
-													</div>
-
-													{/* Model Dropdown */}
-													<div className={`my-2 ${settingsState.globalSettings.syncApplyToChat ? 'hidden' : ''}`}>
-														<ModelDropdown featureName={'Apply'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
-													</div>
-												</div>
-
-
-												<div className='my-2'>
-													{/* Fast Apply Method Dropdown */}
-													<div className='flex items-center gap-x-2 my-2'>
-														<FastApplyMethodDropdown />
-													</div>
-												</div>
-
-											</div>
-										</ErrorBoundary>
-
-
-
-
-										{/* Tools Section */}
-										<div>
-											<h4 className={`text-base`}>Tools</h4>
-											<div className='text-sm text-void-fg-3 mt-1'>{`Tools are functions that LLMs can call. Some tools require user approval.`}</div>
-
-											<div className='my-2'>
-												{/* Auto Accept Switch */}
-												<ErrorBoundary>
-													{[...toolApprovalTypes].map((approvalType) => {
-														return <div key={approvalType} className="flex items-center gap-x-2 my-2">
-															<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
-														</div>
-													})}
-
-												</ErrorBoundary>
-
-												{/* Tool Lint Errors Switch */}
-												<ErrorBoundary>
-
-													<div className='flex items-center gap-x-2 my-2'>
-														<VoidSwitch
-															size='xs'
-															value={settingsState.globalSettings.includeToolLintErrors}
-															onChange={(newVal) => voidSettingsService.setGlobalSetting('includeToolLintErrors', newVal)}
-														/>
-														<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.includeToolLintErrors ? 'Fix lint errors' : `Fix lint errors`}</span>
-													</div>
-												</ErrorBoundary>
-
-												{/* Auto Accept LLM Changes Switch */}
-												<ErrorBoundary>
-													<div className='flex items-center gap-x-2 my-2'>
-														<VoidSwitch
-															size='xs'
-															value={settingsState.globalSettings.autoAcceptLLMChanges}
-															onChange={(newVal) => voidSettingsService.setGlobalSetting('autoAcceptLLMChanges', newVal)}
-														/>
-														<span className='text-void-fg-3 text-xs pointer-events-none'>Auto-accept LLM changes</span>
-													</div>
-												</ErrorBoundary>
-											</div>
-										</div>
-
-
-
-										<div className='w-full'>
-											<h4 className={`text-base`}>Editor</h4>
-											<div className='text-sm text-void-fg-3 mt-1'>{`Settings that control the visibility of Void suggestions in the code editor.`}</div>
-
-											<div className='my-2'>
-												{/* Auto Accept Switch */}
-												<ErrorBoundary>
-													<div className='flex items-center gap-x-2 my-2'>
-														<VoidSwitch
-															size='xs'
-															value={settingsState.globalSettings.showInlineSuggestions}
-															onChange={(newVal) => voidSettingsService.setGlobalSetting('showInlineSuggestions', newVal)}
-														/>
-														<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.showInlineSuggestions ? 'Show suggestions on select' : 'Show suggestions on select'}</span>
-													</div>
-												</ErrorBoundary>
-											</div>
-										</div>
-
-										{/* SCM */}
-										<ErrorBoundary>
-
-											<div className='w-full'>
-												<h4 className={`text-base`}>{displayInfoOfFeatureName('SCM')}</h4>
-												<div className='text-sm text-void-fg-3 mt-1'>Settings that control the behavior of the commit message generator.</div>
-
-												<div className='my-2'>
-													{/* Sync to Chat Switch */}
-													<div className='flex items-center gap-x-2 my-2'>
-														<VoidSwitch
-															size='xs'
-															value={settingsState.globalSettings.syncSCMToChat}
-															onChange={(newVal) => voidSettingsService.setGlobalSetting('syncSCMToChat', newVal)}
-														/>
-														<span className='text-void-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.syncSCMToChat ? 'Same as Chat model' : 'Different model'}</span>
-													</div>
-
-													{/* Model Dropdown */}
-													<div className={`my-2 ${settingsState.globalSettings.syncSCMToChat ? 'hidden' : ''}`}>
-														<ModelDropdown featureName={'SCM'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
-													</div>
-												</div>
-
-											</div>
-										</ErrorBoundary>
-									</div>
-								</ErrorBoundary>
-							</div>
-
-							{/* General section */}
-							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
-								{/* One-Click Switch section */}
-								<div>
-									<ErrorBoundary>
-										<h2 className='text-3xl mb-2'>One-Click Switch</h2>
-										<h4 className='text-void-fg-3 mb-4'>{`Transfer your editor settings into Void.`}</h4>
-
-										<div className='flex flex-col gap-2'>
-											<OneClickSwitchButton className='w-48' fromEditor="VS Code" />
-											<OneClickSwitchButton className='w-48' fromEditor="Cursor" />
-											<OneClickSwitchButton className='w-48' fromEditor="Windsurf" />
-										</div>
-									</ErrorBoundary>
-								</div>
-
-								{/* Import/Export section */}
-								<div>
-									<h2 className='text-3xl mb-2'>Import/Export</h2>
-									<h4 className='text-void-fg-3 mb-4'>{`Transfer Void's settings and chats in and out of Void.`}</h4>
-									<div className='flex flex-col gap-8'>
-										{/* Settings Subcategory */}
-										<div className='flex flex-col gap-2 max-w-48 w-full'>
-											<input key={2 * s} ref={fileInputSettingsRef} type='file' accept='.json' className='hidden' onChange={handleUpload('Settings')} />
-											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => { fileInputSettingsRef.current?.click() }}>
-												Import Settings
-											</VoidButtonBgDarken>
-											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => onDownload('Settings')}>
-												Export Settings
-											</VoidButtonBgDarken>
-											<ConfirmButton className='px-4 py-1 w-full' onConfirm={() => { voidSettingsService.resetState(); }}>
-												Reset Settings
-											</ConfirmButton>
-										</div>
-
-										{/* Chats Subcategory */}
-										<div className='flex flex-col gap-2 max-w-48 w-full'>
-											<input key={2 * s + 1} ref={fileInputChatsRef} type='file' accept='.json' className='hidden' onChange={handleUpload('Chats')} />
-											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => { fileInputChatsRef.current?.click() }}>
-												Import Chats
-											</VoidButtonBgDarken>
-											<VoidButtonBgDarken className='px-4 py-1 w-full' onClick={() => onDownload('Chats')}>
-												Export Chats
-											</VoidButtonBgDarken>
-											<ConfirmButton className='px-4 py-1 w-full' onConfirm={() => { chatThreadsService.resetState(); }}>
-												Reset Chats
-											</ConfirmButton>
-										</div>
-									</div>
-								</div>
-
-
-
-								{/* Built-in Settings section */}
-								<div>
-									<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>{`IDE settings, keyboard settings, and theme customization.`}</h4>
-
-									<ErrorBoundary>
-										<div className='flex flex-col gap-2 justify-center max-w-48 w-full'>
-											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.openSettings') }}>
-												General Settings
-											</VoidButtonBgDarken>
-											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.openGlobalKeybindings') }}>
-												Keyboard Settings
-											</VoidButtonBgDarken>
-											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { commandService.executeCommand('workbench.action.selectTheme') }}>
-												Theme Settings
-											</VoidButtonBgDarken>
-											<VoidButtonBgDarken className='px-4 py-1' onClick={() => { nativeHostService.showItemInFolder(environmentService.logsHome.fsPath) }}>
-												Open Logs
-											</VoidButtonBgDarken>
-										</div>
-									</ErrorBoundary>
-								</div>
-
-
-								{/* Metrics section */}
-								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>Metrics</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>Very basic anonymous usage tracking helps us keep Void running smoothly. You may opt out below. Regardless of this setting, Void never sees your code, messages, or API keys.</h4>
-
-									<div className='my-2'>
-										{/* Disable All Metrics Switch */}
-										<ErrorBoundary>
-											<div className='flex items-center gap-x-2 my-2'>
-												<VoidSwitch
-													size='xs'
-													value={isOptedOut}
-													onChange={(newVal) => {
-														storageService.store(OPT_OUT_KEY, newVal, StorageScope.APPLICATION, StorageTarget.MACHINE)
-														metricsService.capture(`Set metrics opt-out to ${newVal}`, {}) // this only fires if it's enabled, so it's fine to have here
-													}}
-												/>
-												<span className='text-void-fg-3 text-xs pointer-events-none'>{'Opt-out (requires restart)'}</span>
-											</div>
-										</ErrorBoundary>
-									</div>
-								</div>
-
-								{/* AI Instructions section */}
-								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>AI Instructions</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>
-										<ChatMarkdownRender inPTag={true} string={`
-System instructions to include with all AI requests.
-Alternatively, place a \`.voidrules\` file in the root of your workspace.
-								`} chatMessageLocation={undefined} />
-									</h4>
-									<ErrorBoundary>
-										<AIInstructionsBox />
-									</ErrorBoundary>
-									{/* --- Disable System Message Toggle --- */}
-									<div className='my-4'>
-										<ErrorBoundary>
-											<div className='flex items-center gap-x-2'>
-												<VoidSwitch
-													size='xs'
-													value={!!settingsState.globalSettings.disableSystemMessage}
-													onChange={(newValue) => {
-														voidSettingsService.setGlobalSetting('disableSystemMessage', newValue);
-													}}
-												/>
-												<span className='text-void-fg-3 text-xs pointer-events-none'>
-													{'Disable system message'}
-												</span>
-											</div>
-										</ErrorBoundary>
-										<div className='text-void-fg-3 text-xs mt-1'>
-											{`When disabled, Void will not include anything in the system message except for content you specified above.`}
-										</div>
-									</div>
-								</div>
-
-							</div>
-
-
-
-							{/* MCP section */}
-							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className='text-3xl mb-2'>MCP</h2>
-									<h4 className={`text-void-fg-3 mb-4`}>
-										<ChatMarkdownRender inPTag={true} string={`
-Use Model Context Protocol to provide Agent mode with more tools.
-							`} chatMessageLocation={undefined} />
-									</h4>
-									<div className='my-2'>
-										<VoidButtonBgDarken className='px-4 py-1 w-full max-w-48' onClick={async () => { await mcpService.revealMCPConfigFile() }}>
-											Add MCP Server
-										</VoidButtonBgDarken>
-									</div>
-
-									<ErrorBoundary>
-										<MCPServersList />
-									</ErrorBoundary>
-								</ErrorBoundary>
-							</div>
-
-
-
-
-
-						</div>
-
-					</div>
-				</main>
+			<div className="flex flex-col w-full gap-6 max-w-[900px] mx-auto p-6" style={{ minHeight: '80vh' }}>
+				<h1 className='text-2xl w-full'>{`Void's Settings`}</h1>
+				<div className='w-full h-[1px] my-2' />
+				<ErrorBoundary>
+					<ServerEndpointConfig />
+				</ErrorBoundary>
 			</div>
 		</div>
 	);

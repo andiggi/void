@@ -46,6 +46,7 @@ import { deepClone } from '../../../../base/common/objects.js';
 import { acceptBg, acceptBorder, buttonFontSize, buttonTextColor, rejectBg, rejectBorder } from '../common/helpers/colors.js';
 import { DiffArea, Diff, CtrlKZone, VoidFileSnapshot, DiffAreaSnapshotEntry, diffAreaSnapshotKeys, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
+import { IShadowWorkspaceService } from './shadowWorkspaceService.js';
 // import { isMacintosh } from '../../../../base/common/platform.js';
 // import { VOID_OPEN_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
@@ -196,6 +197,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		// @IFileService private readonly _fileService: IFileService,
 		@IVoidModelService private readonly _voidModelService: IVoidModelService,
 		@IConvertToLLMMessageService private readonly _convertToLLMMessageService: IConvertToLLMMessageService,
+		@IShadowWorkspaceService private readonly _shadowWorkspaceService: IShadowWorkspaceService,
 	) {
 		super();
 
@@ -1205,7 +1207,19 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	}
 
 
-	public instantlyRewriteFile({ uri, newContent }: { uri: URI, newContent: string }) {
+	public async instantlyRewriteFile({ uri, newContent }: { uri: URI, newContent: string }) {
+		// Shadow Workspace: Verify code before applying
+		const verification = await this._shadowWorkspaceService.verifyAndApplyCode(uri, newContent);
+
+		if (!verification.verified) {
+			// Show error notification but still allow user to proceed
+			this._notificationService.warn(
+				`Shadow workspace verification failed: ${verification.error}. Code may contain syntax errors.`
+			);
+			// Use corrected content if available, otherwise use original
+			newContent = verification.correctedContent || newContent;
+		}
+
 		// start diffzone
 		const res = this._startStreamingDiffZone({
 			uri,

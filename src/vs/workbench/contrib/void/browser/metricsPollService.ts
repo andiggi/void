@@ -7,7 +7,8 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 
-import * as dom from '../../../../base/browser/dom.js';
+// Air-gapped: Telemetry disabled - dom import not needed
+// import * as dom from '../../../../base/browser/dom.js';
 import { IMetricsService } from '../common/metricsService.js';
 
 
@@ -17,7 +18,8 @@ export interface IMetricsPollService {
 }
 
 
-const PING_EVERY_MS = 15 * 1000 * 60  // 15 minutes
+// Air-gapped: Telemetry disabled - ping interval not used
+// const PING_EVERY_MS = 15 * 1000 * 60  // 15 minutes
 
 export const IMetricsPollService = createDecorator<IMetricsPollService>('voidMetricsPollService');
 class MetricsPollService extends Disposable implements IMetricsPollService {
@@ -25,29 +27,27 @@ class MetricsPollService extends Disposable implements IMetricsPollService {
 
 	static readonly ID = 'voidMetricsPollService';
 
-
-	private readonly intervalID: number
+	// Air-gapped: Telemetry disabled - no interval needed
+	// private readonly intervalID: number
 	constructor(
-		@IMetricsService private readonly metricsService: IMetricsService,
+		// Air-gapped: Telemetry disabled - metrics service not used
+		// @ts-ignore - intentionally unused
+		@IMetricsService private readonly _metricsService: IMetricsService,
 	) {
 		super()
 
-		// initial state
-		const { window } = dom.getActiveWindow()
-		let i = 1
-
-		this.intervalID = window.setInterval(() => {
-			this.metricsService.capture('Alive', { iv1: i })
-			i += 1
-		}, PING_EVERY_MS)
-
-
+		// Air-gapped: Telemetry disabled - no periodic pings
+		// const { window } = dom.getActiveWindow()
+		// let i = 1
+		// this.intervalID = window.setInterval(() => {
+		// 	this.metricsService.capture('Alive', { iv1: i })
+		// 	i += 1
+		// }, PING_EVERY_MS)
 	}
 
 	override dispose() {
 		super.dispose()
-		const { window } = dom.getActiveWindow()
-		window.clearInterval(this.intervalID)
+		// Air-gapped: No interval to clear since telemetry is disabled
 	}
 
 

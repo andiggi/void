@@ -16,7 +16,11 @@ import { isLinux } from '../../../../../../../base/common/platform.js';
 const OVERRIDE_VALUE = false
 
 export const VoidOnboarding = () => {
+	// Air-gapped: Onboarding completely disabled - return null to prevent rendering
+	return null;
 
+	// Original code kept for reference but never executed:
+	/*
 	const voidSettingsState = useSettingsState()
 	const isOnboardingComplete = voidSettingsState.globalSettings.isOnboardingComplete || OVERRIDE_VALUE
 
@@ -37,6 +41,7 @@ export const VoidOnboarding = () => {
 			</div>
 		</div>
 	)
+	*/
 }
 
 const VoidIcon = () => {
@@ -97,24 +102,16 @@ const FadeIn = ({ children, className, delayMs = 0, durationMs, ...props }: { ch
 
 const tabNames = ['Free', 'Paid', 'Local'] as const;
 
-type TabName = typeof tabNames[number] | 'Cloud/Other';
+// Air-gapped: Cloud providers removed
+type TabName = typeof tabNames[number];
 
-// Data for cloud providers tab
-const cloudProviders: ProviderName[] = ['googleVertex', 'liteLLM', 'microsoftAzure', 'awsBedrock', 'openAICompatible'];
-
-// Data structures for provider tabs
+// Data structures for provider tabs - only local providers allowed
 const providerNamesOfTab: Record<TabName, ProviderName[]> = {
-	Free: ['gemini', 'openRouter'],
 	Local: localProviderNames,
-	Paid: providerNames.filter(pn => !(['gemini', 'openRouter', ...localProviderNames, ...cloudProviders] as string[]).includes(pn)) as ProviderName[],
-	'Cloud/Other': cloudProviders,
 };
 
 const descriptionOfTab: Record<TabName, string> = {
-	Free: `Providers with a 100% free tier. Add as many as you'd like!`,
-	Paid: `Connect directly with any provider (bring your own key).`,
 	Local: `Active providers should appear automatically. Add as many as you'd like! `,
-	'Cloud/Other': `Add as many as you'd like! Reach out for custom configuration requests.`,
 };
 
 

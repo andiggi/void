@@ -15,6 +15,18 @@ import { MAX_CHILDREN_URIs_PAGE, MAX_DIRSTR_CHARS_TOTAL_BEGINNING, MAX_DIRSTR_CH
 
 const MAX_FILES_TOTAL = 1000;
 
+// RAG prioritization: File extensions that should be prioritized in embedding queue
+const PRIORITY_SCORE: Record<string, number> = {
+	'.v': 10,
+	'.vhdl': 10,
+	'.cpp': 9,
+	'.cxx': 9,
+	'.cc': 9,
+	'.c': 9,
+	'.py': 8,
+	'.ts': 8,
+	'.js': 7,
+};
 
 const START_MAX_DEPTH = Infinity;
 const START_MAX_ITEMS_PER_DIR = Infinity; // Add start value as Infinity
@@ -58,7 +70,8 @@ const shouldExcludeDirectory = (name: string) => {
 		name === 'logs' ||
 		name === 'cache' ||
 		name === 'resource' ||
-		name === 'resources'
+		name === 'resources' ||
+		name === '.void-shadow' // Shadow workspace directory
 
 	) {
 		return true;
@@ -238,9 +251,26 @@ const renderChildrenCombined = async (
 		return { childrenContent: '', childrenCutOff: true };
 	}
 
+	// RAG prioritization: Sort children to prioritize certain file extensions
+	const sortedChildren = [...children].sort((a, b) => {
+		if (a.isDirectory && !b.isDirectory) return -1;
+		if (!a.isDirectory && b.isDirectory) return 1;
+
+		// For files, prioritize by extension
+		if (!a.isDirectory && !b.isDirectory) {
+			const extA = a.name.substring(a.name.lastIndexOf('.')).toLowerCase();
+			const extB = b.name.substring(b.name.lastIndexOf('.')).toLowerCase();
+			const scoreA = PRIORITY_SCORE[extA] || 0;
+			const scoreB = PRIORITY_SCORE[extB] || 0;
+			return scoreB - scoreA; // Higher score first
+		}
+
+		return 0;
+	});
+
 	// Apply maxItemsPerDir limit - only process the specified number of items
-	const itemsToProcess = maxItemsPerDir === Infinity ? children : children.slice(0, maxItemsPerDir);
-	const hasMoreItems = children.length > itemsToProcess.length;
+	const itemsToProcess = maxItemsPerDir === Infinity ? sortedChildren : sortedChildren.slice(0, maxItemsPerDir);
+	const hasMoreItems = sortedChildren.length > itemsToProcess.length;
 
 	for (let i = 0; i < itemsToProcess.length; i++) {
 		// Check if we've reached the file limit
